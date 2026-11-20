@@ -1,66 +1,79 @@
 document.addEventListener("DOMContentLoaded", () => {
 
-    /* =========================
-       INIT
-    ========================== */
-
-    const refreshIcons = () => {
-        if (window.lucide) window.lucide.createIcons();
-    };
-
-    refreshIcons();
-
-
-    /* =========================
-       TOAST
-    ========================== */
-
-    const toastContainer = document.getElementById("toastContainer");
-
-    function showToast(message, type = "info", duration = 3000) {
-
-        if (!toastContainer) return;
-
-        const toast = document.createElement("div");
-        toast.className = `toast ${type}`;
-
-        const icons = {
-            info: "info",
-            success: "check-circle-2",
-            error: "alert-circle",
-            warning: "alert-triangle"
-        };
-
-        toast.innerHTML = `<i data-lucide="${icons[type] || icons.info}"></i><span></span>`;
-        toast.querySelector("span").textContent = message;
-
-        toastContainer.appendChild(toast);
-        refreshIcons();
-
-        requestAnimationFrame(() => toast.classList.add("show"));
-
-        setTimeout(() => {
-            toast.classList.remove("show");
-            setTimeout(() => toast.remove(), 300);
-        }, duration);
+    if (window.lucide) {
+        window.lucide.createIcons();
     }
 
+    const actionDialog = {
+        backdrop: document.getElementById("actionModalBackdrop"), title: document.getElementById("actionModalTitle"), subtitle: document.getElementById("actionModalSubtitle"), body: document.getElementById("actionModalBody"), close: document.getElementById("actionModalClose"), cancel: document.getElementById("actionModalCancel"), confirm: document.getElementById("actionModalConfirm")
+    };
+    let dialogOnConfirm = null;
+    let dialogReturnFocus = null;
+    function showToast(message, type = "info") {
+        const container = document.getElementById("toastContainer"); if (!container) return;
+        const icons = { info: "info", success: "circle-check", error: "circle-x", warning: "triangle-alert" };
+        const toast = document.createElement("div"); toast.className = `toast ${icons[type] ? type : "info"}`; toast.setAttribute("role", "status");
+        const icon = document.createElement("i"); icon.dataset.lucide = icons[type] || icons.info; icon.setAttribute("aria-hidden", "true");
+        const text = document.createElement("span"); text.textContent = message; toast.append(icon, text); container.append(toast); window.lucide?.createIcons();
+        requestAnimationFrame(() => toast.classList.add("show")); window.setTimeout(() => { toast.classList.remove("show"); window.setTimeout(() => toast.remove(), 300); }, 3000);
+    }
+    function closeModal(confirmed = false) {
+        if (!actionDialog.backdrop || actionDialog.backdrop.hidden) return;
+        actionDialog.backdrop.hidden = true; actionDialog.backdrop.setAttribute("aria-hidden", "true"); document.body.classList.remove("modal-open");
+        const callback = dialogOnConfirm; const focusTarget = dialogReturnFocus; dialogOnConfirm = null; dialogReturnFocus = null;
+        if (confirmed) callback?.(); focusTarget?.focus?.();
+    }
+    function openModal(options = {}) {
+        if (!actionDialog.backdrop) return; if (!actionDialog.backdrop.hidden) closeModal();
+        dialogReturnFocus = document.activeElement; actionDialog.title.textContent = options.title || "Action"; actionDialog.subtitle.textContent = options.subtitle || ""; actionDialog.body.replaceChildren();
+        if (options.message) { const message = document.createElement("p"); message.className = "modal-message"; message.textContent = options.message; actionDialog.body.append(message); }
+        const controls = new Map();
+        (options.fields || []).forEach((field, index) => {
+            const wrapper = document.createElement("div"); wrapper.className = "modal-field"; const label = document.createElement("label"); const id = `actionModalField${index}`; label.htmlFor = id; label.textContent = field.label;
+            let control;
+            if (field.type === "textarea") control = document.createElement("textarea");
+            else if (field.type === "select") { control = document.createElement("select"); (field.options || []).forEach(item => { const option = document.createElement("option"); option.value = typeof item === "string" ? item : item.value; option.textContent = typeof item === "string" ? item : item.label; control.append(option); }); }
+            else { control = document.createElement("input"); control.type = field.type || "text"; }
+            control.id = id; control.name = field.name || id; control.value = field.value ?? ""; control.required = Boolean(field.required); control.readOnly = Boolean(field.readOnly); if (field.placeholder) control.placeholder = field.placeholder;
+            controls.set(control.name, control); wrapper.append(label, control); actionDialog.body.append(wrapper);
+        });
+        actionDialog.cancel.textContent = options.cancelLabel || "Cancel"; actionDialog.cancel.hidden = options.cancelLabel === null; actionDialog.confirm.textContent = options.confirmLabel || "Continue"; actionDialog.confirm.hidden = options.confirmLabel === null; actionDialog.confirm.className = options.confirmClass || "primary-button";
+        dialogOnConfirm = () => options.onConfirm?.(Object.fromEntries([...controls].map(([name, control]) => [name, control.value])));
+        actionDialog.backdrop.hidden = false; actionDialog.backdrop.setAttribute("aria-hidden", "false"); document.body.classList.add("modal-open"); requestAnimationFrame(() => (actionDialog.body.querySelector("input, select, textarea") || actionDialog.close).focus());
+    }
+    function openConfirm(options = {}) { openModal({ ...options, cancelLabel: options.cancelLabel || "No", confirmLabel: options.confirmLabel || "Yes, Continue", confirmClass: options.confirmClass || "danger-button" }); }
+    actionDialog.close?.addEventListener("click", () => closeModal()); actionDialog.cancel?.addEventListener("click", () => closeModal());
+    actionDialog.confirm?.addEventListener("click", () => { const invalid = [...actionDialog.body.querySelectorAll("input, select, textarea")].find(control => !control.checkValidity()); if (invalid) { invalid.reportValidity(); return; } closeModal(true); });
+    actionDialog.backdrop?.addEventListener("click", event => { if (event.target === actionDialog.backdrop) closeModal(); });
+    document.addEventListener("keydown", event => {
+        if (event.key === "Escape") { if (!actionDialog.backdrop?.hidden) closeModal(); else if (document.getElementById("packageModal")?.classList.contains("show")) document.getElementById("cancelModal")?.click(); }
+        const target = event.target;
+        if (event.key === "/" && actionDialog.backdrop?.hidden && !target?.matches?.("input, textarea, select, [contenteditable='true']")) { const search = document.getElementById("globalSearch"); if (search) { event.preventDefault(); search.focus(); } }
+    });
+
 
     /* =========================
-       SIDEBAR
+       SIDEBAR TOGGLE
     ========================== */
 
-    const sidebarToggle = document.getElementById("mobileMenu");
+    const sidebarToggle =
+        document.getElementById("mobileMenu");
 
     if (sidebarToggle) {
-        sidebarToggle.addEventListener("click", () => {
-            const isExpanded = sidebarToggle.getAttribute("aria-expanded") === "true";
-            const nextExpanded = !isExpanded;
 
-            sidebarToggle.setAttribute("aria-expanded", String(nextExpanded));
-            sidebarToggle.setAttribute("aria-label", nextExpanded ? "Hide sidebar" : "Show sidebar");
-            sidebarToggle.title = nextExpanded ? "Hide sidebar" : "Show sidebar";
+        sidebarToggle.addEventListener("click", () => {
+
+            const isHidden =
+                document.body.classList.toggle("sidebar-hidden");
+
+            const action = isHidden ? "Show" : "Hide";
+
+            sidebarToggle.setAttribute("aria-expanded", String(!isHidden));
+            sidebarToggle.setAttribute("aria-label", action + " sidebar");
+            sidebarToggle.title = action + " sidebar";
+
         });
+
     }
 
 
@@ -68,394 +81,132 @@ document.addEventListener("DOMContentLoaded", () => {
        NAV LINKS
     ========================== */
 
-    document.querySelectorAll(".nav-link").forEach(link => {
-        link.addEventListener("click", (event) => {
-            const href = link.getAttribute("href");
-            if (!href || href === "#") {
-                event.preventDefault();
-                showToast("This page is not available yet.", "info");
-            }
-        });
-    });
-
-
     /* =========================
-       PERIOD DATA
+       PERIOD SELECTOR
     ========================== */
+
+    const periodTabs =
+        document.querySelectorAll(".period-tab");
 
     const periodData = {
 
         "7d": {
-            subtitle: "Daily earnings this week",
-            revenue: 482340,
-            revenueCompare: "vs ₱428,720 last period",
-            bookings: 248,
-            bookingsCompare: "vs 229 last period",
-            guests: 892,
-            guestsCompare: "vs 771 last period",
-            rating: "4.9",
-            changeRevenue: "12.5%",
-            changeBookings: "8.2%",
-            changeGuests: "15.7%",
-            changeRating: "0.2",
-            bars: [
-                { label: "Mon", value: 42 },
-                { label: "Tue", value: 68 },
-                { label: "Wed", value: 55 },
-                { label: "Thu", value: 80 },
-                { label: "Fri", value: 92 },
-                { label: "Sat", value: 76 },
-                { label: "Sun", value: 60 }
-            ],
-            yAxis: ["₱80k", "₱60k", "₱40k", "₱20k", "₱0"],
-            status: { confirmed: 142, pending: 58, completed: 36, cancelled: 12 }
+            revenue: "₱482,340",
+            bookings: "248",
+            guests: "892",
+            bars: [42, 68, 55, 80, 92, 76, 60],
+            labels: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         },
 
         "30d": {
-            subtitle: "Weekly earnings this month",
-            revenue: 1924500,
-            revenueCompare: "vs ₱1,748,200 last period",
-            bookings: 1024,
-            bookingsCompare: "vs 942 last period",
-            guests: 3580,
-            guestsCompare: "vs 3,120 last period",
-            rating: "4.8",
-            changeRevenue: "10.1%",
-            changeBookings: "8.7%",
-            changeGuests: "14.7%",
-            changeRating: "0.1",
-            bars: [
-                { label: "W1", value: 65 },
-                { label: "W2", value: 72 },
-                { label: "W3", value: 60 },
-                { label: "W4", value: 78 },
-                { label: "W5", value: 85 },
-                { label: "W6", value: 90 },
-                { label: "W7", value: 70 },
-                { label: "W8", value: 82 },
-                { label: "W9", value: 74 },
-                { label: "W10", value: 88 }
-            ],
-            yAxis: ["₱300k", "₱225k", "₱150k", "₱75k", "₱0"],
-            status: { confirmed: 592, pending: 240, completed: 148, cancelled: 44 }
+            revenue: "₱1,924,500",
+            bookings: "1,024",
+            guests: "3,580",
+            bars: [65, 72, 60, 78, 85, 90, 70, 82, 74, 88],
+            labels: ["W1", "W2", "W3", "W4", "W5", "W6", "W7", "W8", "W9", "W10"]
         },
 
         "90d": {
-            subtitle: "Monthly earnings this quarter",
-            revenue: 5782300,
-            revenueCompare: "vs ₱5,240,100 last period",
-            bookings: 3012,
-            bookingsCompare: "vs 2,812 last period",
-            guests: 10240,
-            guestsCompare: "vs 9,180 last period",
-            rating: "4.8",
-            changeRevenue: "10.3%",
-            changeBookings: "7.1%",
-            changeGuests: "11.5%",
-            changeRating: "0.1",
-            bars: [
-                { label: "Jan", value: 58 },
-                { label: "Feb", value: 65 },
-                { label: "Mar", value: 72 },
-                { label: "Apr", value: 80 },
-                { label: "May", value: 88 },
-                { label: "Jun", value: 75 },
-                { label: "Jul", value: 82 },
-                { label: "Aug", value: 90 },
-                { label: "Sep", value: 85 },
-                { label: "Oct", value: 78 },
-                { label: "Nov", value: 92 },
-                { label: "Dec", value: 88 }
-            ],
-            yAxis: ["₱800k", "₱600k", "₱400k", "₱200k", "₱0"],
-            status: { confirmed: 1732, pending: 690, completed: 452, cancelled: 138 }
+            revenue: "₱5,782,300",
+            bookings: "3,012",
+            guests: "10,240",
+            bars: [58, 65, 72, 80, 88, 75, 82, 90, 85, 78, 92, 88],
+            labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         },
 
         "1y": {
-            subtitle: "Full year performance",
-            revenue: 22458900,
-            revenueCompare: "vs ₱19,840,000 last year",
-            bookings: 12480,
-            bookingsCompare: "vs 10,920 last year",
-            guests: 41320,
-            guestsCompare: "vs 36,480 last year",
-            rating: "4.9",
-            changeRevenue: "13.2%",
-            changeBookings: "14.3%",
-            changeGuests: "13.3%",
-            changeRating: "0.2",
-            bars: [
-                { label: "Jan", value: 55 },
-                { label: "Feb", value: 62 },
-                { label: "Mar", value: 70 },
-                { label: "Apr", value: 78 },
-                { label: "May", value: 84 },
-                { label: "Jun", value: 82 },
-                { label: "Jul", value: 88 },
-                { label: "Aug", value: 92 },
-                { label: "Sep", value: 86 },
-                { label: "Oct", value: 90 },
-                { label: "Nov", value: 94 },
-                { label: "Dec", value: 98 }
-            ],
-            yAxis: ["₱2M", "₱1.5M", "₱1M", "₱500k", "₱0"],
-            status: { confirmed: 7182, pending: 2860, completed: 1888, cancelled: 550 }
+            revenue: "₱22,458,900",
+            bookings: "12,480",
+            guests: "41,320",
+            bars: [55, 62, 70, 78, 84, 82, 88, 92, 86, 90, 94, 98],
+            labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
         }
 
     };
 
 
-    /* =========================
-       ELEMENTS
-    ========================== */
-
-    const periodTabs        = document.querySelectorAll(".period-tab");
-    const chartEl           = document.getElementById("revenueChart");
-    const yAxisEl           = document.getElementById("revenueYAxis");
-    const chartTotal        = document.getElementById("revenueChartTotal");
-    const chartSubtitle     = document.getElementById("revenueChartSubtitle");
-
-    const kpiRevenue        = document.getElementById("kpiRevenue");
-    const kpiBookings       = document.getElementById("kpiBookings");
-    const kpiGuests         = document.getElementById("kpiGuests");
-    const kpiRating         = document.getElementById("kpiRating");
-
-    const kpiRevenueCompare = document.getElementById("kpiRevenueCompare");
-    const kpiBookingsCompare = document.getElementById("kpiBookingsCompare");
-    const kpiGuestsCompare  = document.getElementById("kpiGuestsCompare");
-
-    const changeRevenue     = document.getElementById("changeRevenue");
-    const changeBookings    = document.getElementById("changeBookings");
-    const changeGuests      = document.getElementById("changeGuests");
-    const changeRating      = document.getElementById("changeRating");
-
-    // Donut
-    const statusDonut       = document.getElementById("statusDonut");
-    const donutTotal        = document.getElementById("donutTotal");
-    const legendConfirmed   = document.getElementById("legendConfirmed");
-    const legendPending     = document.getElementById("legendPending");
-    const legendCompleted   = document.getElementById("legendCompleted");
-    const legendCancelled   = document.getElementById("legendCancelled");
-    const legendConfirmedPct = document.getElementById("legendConfirmedPct");
-    const legendPendingPct   = document.getElementById("legendPendingPct");
-    const legendCompletedPct = document.getElementById("legendCompletedPct");
-    const legendCancelledPct = document.getElementById("legendCancelledPct");
-
-    // Search / table
-    const searchInput       = document.getElementById("globalSearch");
-    const transactionsBody  = document.getElementById("transactionsBody");
-    const emptyState        = document.getElementById("emptyState");
-
-
-    /* =========================
-       HELPERS
-    ========================== */
-
-    const formatMoney = (n) =>
-        "₱" + Number(n).toLocaleString("en-PH");
-
-    const formatNumber = (n) =>
-        Number(n).toLocaleString("en-PH");
-
-
-    /* =========================
-       ANIMATED COUNTERS
-    ========================== */
-
-    function animateValue(el, from, to, duration = 700, formatter = formatNumber) {
-
-        if (!el) return;
-
-        const start = performance.now();
-
-        function update(now) {
-            const progress = Math.min((now - start) / duration, 1);
-            const eased = 1 - Math.pow(1 - progress, 3);
-            const current = from + (to - from) * eased;
-            el.textContent = formatter(Math.round(current));
-
-            if (progress < 1) requestAnimationFrame(update);
-        }
-
-        requestAnimationFrame(update);
-    }
-
-
-    /* =========================
-       RENDER CHART
-    ========================== */
-
     function renderChart(period) {
 
         const data = periodData[period];
+
         if (!data) return;
 
-        // Clear
-        chartEl.innerHTML = "";
-        yAxisEl.innerHTML = "";
+        const chart =
+            document.getElementById("revenueChart");
 
-        // Y-axis
-        data.yAxis.forEach(label => {
-            const span = document.createElement("span");
-            span.textContent = label;
-            yAxisEl.appendChild(span);
-        });
+        if (!chart) return;
 
-        // Bars
-        data.bars.forEach(item => {
-            const col = document.createElement("div");
-            col.className = "chart-col";
-
+        chart.replaceChildren();
+        data.bars.forEach((value, index) => {
+            const column = document.createElement("div");
+            column.className = "chart-col";
             const bar = document.createElement("div");
             bar.className = "chart-bar";
-            bar.style.height = item.value + "%";
-            bar.dataset.value = item.value + "%";
-            bar.title = item.label + ": " + item.value + "%";
-
+            bar.style.height = `${value}%`;
             const label = document.createElement("span");
-            label.textContent = item.label;
-
-            col.appendChild(bar);
-            col.appendChild(label);
-
-            chartEl.appendChild(col);
+            label.textContent = data.labels[index] || "";
+            column.append(bar, label);
+            chart.append(column);
         });
-
     }
 
-
-    /* =========================
-       RENDER KPIs
-    ========================== */
-
-    function renderKPIs(period) {
-
+    function updateKPIs(period) {
         const data = periodData[period];
         if (!data) return;
-
-        chartSubtitle.textContent = data.subtitle;
-        chartTotal.textContent    = formatMoney(data.revenue);
-
-        // Revenue (with ₱ prefix)
-        const currentRev = Number(kpiRevenue.textContent.replace(/[^0-9]/g, "")) || 0;
-        animateValue(kpiRevenue, currentRev, data.revenue, 700, formatMoney);
-
-        // Bookings
-        const currentBookings = Number(kpiBookings.textContent) || 0;
-        animateValue(kpiBookings, currentBookings, data.bookings, 700, formatNumber);
-
-        // Guests
-        const currentGuests = Number(kpiGuests.textContent) || 0;
-        animateValue(kpiGuests, currentGuests, data.guests, 700, formatNumber);
-
-        // Rating
-        kpiRating.textContent = data.rating;
-
-        // Comparisons
-        kpiRevenueCompare.textContent  = data.revenueCompare;
-        kpiBookingsCompare.textContent = data.bookingsCompare;
-        kpiGuestsCompare.textContent   = data.guestsCompare;
-
-        // Change badges
-        changeRevenue.querySelector("svg + *")?.remove();
-        changeRevenue.childNodes[1].textContent = " " + data.changeRevenue;
-
-        changeBookings.childNodes[1].textContent = " " + data.changeBookings;
-        changeGuests.childNodes[1].textContent   = " " + data.changeGuests;
-        changeRating.childNodes[1].textContent   = " " + data.changeRating;
-
+        const values = document.querySelectorAll(".kpi-value");
+        if (values[0]) values[0].textContent = data.revenue;
+        if (values[1]) values[1].textContent = data.bookings;
+        if (values[2]) values[2].textContent = data.guests;
     }
 
-
-    /* =========================
-       RENDER DONUT
-    ========================== */
-
-    function renderDonut(period) {
-
-        const data = periodData[period];
-        if (!data) return;
-
-        const { confirmed, pending, completed, cancelled } = data.status;
-
-        const total = confirmed + pending + completed + cancelled;
-
-        const p1 = (confirmed / total) * 100;
-        const p2 = p1 + (pending / total) * 100;
-        const p3 = p2 + (completed / total) * 100;
-
-        statusDonut.style.background = `
-            conic-gradient(
-                var(--green) 0% ${p1}%,
-                var(--yellow) ${p1}% ${p2}%,
-                var(--blue) ${p2}% ${p3}%,
-                var(--red) ${p3}% 100%
-            )
-        `;
-
-        donutTotal.textContent = formatNumber(total);
-
-        legendConfirmed.textContent = formatNumber(confirmed);
-        legendPending.textContent   = formatNumber(pending);
-        legendCompleted.textContent = formatNumber(completed);
-        legendCancelled.textContent = formatNumber(cancelled);
-
-        legendConfirmedPct.textContent = Math.round(p1) + "%";
-        legendPendingPct.textContent   = Math.round(p2 - p1) + "%";
-        legendCompletedPct.textContent = Math.round(p3 - p2) + "%";
-        legendCancelledPct.textContent = Math.round(100 - p3) + "%";
-
-    }
-
-
-    /* =========================
-       PERIOD SWITCHING
-    ========================== */
 
     periodTabs.forEach(tab => {
+
         tab.addEventListener("click", () => {
 
-            periodTabs.forEach(t => {
-                t.classList.remove("active");
-                t.setAttribute("aria-selected", "false");
-            });
-
+            periodTabs.forEach(t => t.classList.remove("active"));
             tab.classList.add("active");
-            tab.setAttribute("aria-selected", "true");
 
             const period = tab.dataset.period;
 
             renderChart(period);
-            renderKPIs(period);
-            renderDonut(period);
-
-            showToast("Showing data for: " + period.toUpperCase(), "info", 1800);
+            updateKPIs(period);
 
         });
+
     });
 
 
     /* =========================
-       SEARCH
+       SEARCH (highlights matching transactions)
     ========================== */
+
+    const searchInput =
+        document.getElementById("globalSearch");
 
     if (searchInput) {
 
         searchInput.addEventListener("input", () => {
 
-            const keyword = searchInput.value.toLowerCase().trim();
-            const rows = transactionsBody.querySelectorAll("tr");
+            const keyword =
+                searchInput.value.toLowerCase().trim();
 
-            let visible = 0;
+            const rows =
+                document.querySelectorAll(
+                    "#transactionsTable tbody tr"
+                );
 
             rows.forEach(row => {
-                const text = row.innerText.toLowerCase();
-                const match = !keyword || text.includes(text) || text.includes(keyword);
-                row.style.display = match ? "" : "none";
-                if (match) visible++;
-            });
 
-            emptyState.hidden = visible !== 0;
+                const text =
+                    row.innerText.toLowerCase();
+
+                row.style.display =
+                    text.includes(keyword) ? "" : "none";
+
+            });
 
         });
 
@@ -463,73 +214,106 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
     /* =========================
-       EXPORT / PRINT
+       EXPORT
     ========================== */
 
-    document.getElementById("exportReportButton")
-        ?.addEventListener("click", () => {
-            showToast("Exporting report as CSV...", "success");
-            // Later: build and download a CSV
+    const exportButton =
+        document.getElementById("exportReportButton");
+
+    if (exportButton) {
+
+        exportButton.addEventListener("click", () => {
+
+            showToast("Report export is not connected yet.", "info");
+
         });
 
-
-    document.getElementById("printReportButton")
-        ?.addEventListener("click", () => {
-            showToast("Preparing to print...", "info");
-            setTimeout(() => window.print(), 400);
-        });
+    }
 
 
     /* =========================
-       NOTIFICATIONS / LOGOUT / PROFILE
+       CHART BAR CLICK
     ========================== */
 
-    document.getElementById("notificationButton")
-        ?.addEventListener("click", () => showToast("You have 3 new notifications.", "info"));
+    document.addEventListener("click", (event) => {
 
-    document.getElementById("logoutButton")
-        ?.addEventListener("click", () => {
-            if (confirm("Are you sure you want to logout?"))
-                showToast("Logging out...", "success");
-        });
+        const bar = event.target.closest(".chart-bar");
 
-    document.getElementById("adminProfileButton")
-        ?.addEventListener("click", () => showToast("Admin profile menu", "info"));
+        if (bar) {
 
+            openModal({
+                title: "Revenue Detail",
+                subtitle: "Selected chart value",
+                message: `Revenue: ${bar.style.height} of peak`,
+                cancelLabel: null,
+                confirmLabel: "Close"
+            });
 
-    /* =========================
-       CHART BAR HOVER (chart tooltip already handled via CSS)
-    ========================== */
-
-    // Bonus: clicking a bar shows its value
-    chartEl?.addEventListener("click", (e) => {
-        const bar = e.target.closest(".chart-bar");
-        if (!bar) return;
-
-        showToast("Revenue: " + bar.dataset.value + " of peak", "info", 1800);
-    });
-
-
-    /* =========================
-       KEYBOARD SHORTCUTS
-    ========================== */
-
-    document.addEventListener("keydown", (e) => {
-
-        if (e.key === "/" &&
-            document.activeElement.tagName !== "INPUT" &&
-            document.activeElement.tagName !== "TEXTAREA") {
-            e.preventDefault();
-            searchInput?.focus();
-        }
-
-        if (e.key === "Escape" && document.activeElement === searchInput) {
-            searchInput.value = "";
-            searchInput.dispatchEvent(new Event("input"));
-            searchInput.blur();
         }
 
     });
+
+
+    /* =========================
+       NOTIFICATIONS
+    ========================== */
+
+    const notificationButton =
+        document.getElementById("notificationButton");
+
+    if (notificationButton) {
+
+        notificationButton.addEventListener("click", () => {
+
+            showToast("You have 3 new notifications.", "info");
+
+        });
+
+    }
+
+
+    /* =========================
+       LOGOUT
+    ========================== */
+
+    const logoutButton =
+        document.getElementById("logoutButton");
+
+    if (logoutButton) {
+
+        logoutButton.addEventListener("click", () => {
+
+            openConfirm({
+                title: "Log Out",
+                message: "Are you sure you want to log out?",
+                confirmLabel: "Log Out",
+                onConfirm: () => {
+                    showToast("Logging out...", "info");
+                // window.location.href = "login.html";
+                }
+            });
+
+        });
+
+    }
+
+
+    /* =========================
+       ADMIN PROFILE
+    ========================== */
+
+    const adminProfile =
+        document.querySelector(".admin-profile");
+
+    if (adminProfile) {
+
+        adminProfile.addEventListener("click", () => {
+
+            openModal({ title: "Staff Profile", subtitle: "Signed in as staff", message: "Jonas Reyes", cancelLabel: null, confirmLabel: "Close" });
+
+        });
+
+    }
 
 
     /* =========================
@@ -537,7 +321,16 @@ document.addEventListener("DOMContentLoaded", () => {
     ========================== */
 
     renderChart("7d");
-    renderKPIs("7d");
-    renderDonut("7d");
 
 });
+
+ /* =========================
+       LOGOUT
+    ========================== */
+
+    document.getElementById("logoutButton")
+        ?.addEventListener("click", () => {
+            if (confirm("Are you sure you want to logout?")) {
+                showToast("Logging out...", "success");
+            }
+        });
